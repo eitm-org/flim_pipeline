@@ -1,0 +1,167 @@
+---
+title: "FLIM Z'factor and %CV"
+output: word_document
+date: "2024-10-25"
+author: "Sevde Coban"
+---
+
+
+```{r setup, include=FALSE, echo=FALSE, message= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+```{r fb, echo=FALSE, warning=FALSE, message=FALSE}
+library(dplyr)
+library(here)
+
+
+df <- readRDS(here("data", paste0("data_cleaning_output_", ".RDS")))
+
+df <- df %>%  
+  group_by(scan_date) %>%
+  mutate(cv_fb = sd(f_b, na.rm = TRUE)/mean(f_b, na.rm = TRUE)*100) %>%
+  #Osim is low control
+  #DMSO is high control
+  mutate(ctrl_0_mean_fb = mean(f_b[treatment == "Osimertinib"], na.rm = TRUE),
+         ctrl_0_sd_fb = sd(f_b[treatment == "Osimertinib"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_fb = f_b - ctrl_0_mean_fb,
+         #take the positive control mean
+         ctrl_100_mean_fb = mean(f_b[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_minus_mean_fb = mean(signal_minus_ctrl_0_mean_fb[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_sd_fb = sd(f_b[treatment == "DMSO"], na.rm = TRUE),
+         z_prime_factor_fb = 1 - (3*ctrl_100_sd_fb + 3*ctrl_0_sd_fb)/abs(ctrl_100_mean_fb - ctrl_0_mean_fb),
+         plate_cv_fb = mean(cv_fb, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
+
+
+z_prime <- df$z_prime_factor_fb
+plate_cv <- df$plate_cv_fb
+plate_id <- df$plate_id
+
+summary_df <- data.frame(plate_id = plate_id, z_prime_factor = z_prime, percent_cv = plate_cv)
+summary_df <- summary_df[1, , drop = FALSE]
+
+library(knitr)
+
+kable(summary_df, caption = "Fraction Bound Z'factor and %CV")
+```
+
+
+
+Scatterplots:
+
+```{r scatterplot, echo=FALSE, warning=FALSE, message=FALSE}
+
+library(ggplot2)
+
+
+scatterplot <- ggplot(df, aes(x=g, y=s, color = plate_id)) + geom_point() + facet_wrap(~treatment + concentration) + labs(x = "g-coordinate", y = "s-coordinate", color = "Plate_ID") 
+
+
+scatterplot
+
+
+
+
+
+
+
+```
+
+
+
+```{r gcoord, echo=FALSE, warning=FALSE, message=FALSE}
+
+
+df <- df %>%  
+  group_by(scan_date) %>%
+  mutate(cv_g = sd(g, na.rm = TRUE)/mean(g, na.rm = TRUE)*100) %>%
+  #Osim is low control
+  #DMSO is high control
+  mutate(ctrl_0_mean_g = mean(g[treatment == "Osimertinib"], na.rm = TRUE),
+         ctrl_0_sd_g = sd(g[treatment == "Osimertinib"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_g = g - ctrl_0_mean_g,
+         #take the positive control mean
+         ctrl_100_mean_g = mean(g[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_minus_mean_g = mean(signal_minus_ctrl_0_mean_g[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_sd_g = sd(g[treatment == "DMSO"], na.rm = TRUE),
+         z_prime_factor_g = 1 - (3*ctrl_100_sd_g + 3*ctrl_0_sd_g)/abs(ctrl_100_mean_g - ctrl_0_mean_g),
+         plate_cv_g = mean(cv_g, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
+
+
+z_prime <- df$z_prime_factor_g
+plate_cv <- df$plate_cv_g
+plate_id <- df$plate_id
+
+summary_df2 <- data.frame(plate_id = plate_id, z_prime_factor = z_prime, percent_cv = plate_cv)
+summary_df2 <- summary_df2[1, , drop = FALSE]
+
+library(knitr)
+
+kable(summary_df2, caption = "G-Coordinate Z'factor and %CV")
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+Average g-coordinates across z-slice for each sample:
+```{r avg z slices, echo=FALSE, warning=FALSE, message=FALSE}
+library(dplyr)
+library(knitr)
+
+
+df <- df %>% group_by(sample_id) %>% mutate(mean_g_coord = mean(g)) %>% ungroup()
+
+summary_df <- df %>% select(sample_id, mean_g_coord) %>% distinct()
+kable(summary_df, col.names = c("Sample ID", "Mean g-coordinate"), caption = "Mean g-coordinate per sample")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
