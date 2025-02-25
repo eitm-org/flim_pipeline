@@ -1,0 +1,345 @@
+---
+title: "FLIM Analysis Template"
+output: word_document
+date: "2025-02-25"
+author: "Sevde Coban"
+---
+
+
+```{r setup, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+library(dplyr)
+library(here)
+library(stringr)
+library(knitr)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=12, fig.heaight=12, dpi=330)
+
+df1 <- readRDS(here("data", paste0("data_cleaning_outputnew_", ".RDS")))
+avg_new_df <- readRDS(here("data", paste0("data_cleaning_outputnew_avg", ".RDS")))
+
+
+
+# Create concentration column
+df1 <- df1 %>%
+  mutate(Concentration_uM = case_when(
+    str_detect(Replicate_Group, "STA-1uM") ~ "1",
+    str_detect(Replicate_Group, "STA-0-1uM") ~ "0.1",
+    str_detect(Replicate_Group, "untreated") ~ "0"
+  ))
+
+avg_new_df <- avg_new_df %>%
+  mutate(Concentration_uM = case_when(
+    str_detect(Replicate_Group, "STA-1uM") ~ "1",
+    str_detect(Replicate_Group, "STA-0-1uM") ~ "0.1",
+    str_detect(Replicate_Group, "untreated") ~ "0"
+  ))
+
+
+
+```
+
+# Purpose
+
+FLIM collects photon excitation information from cell images to examine metabolic changes within biologic samples. This information is Fourier transformed to collect two parameters: S-coordinate and G-coordinate. These parameters are used to calculate fraction bound (fB), which is the fraction of bound to unbound NADH within the cells we’re looking at. Fraction bound can tell you if the cells are using more glycolysis (more free NADH) or oxidative phosphorylation (more NADH is bound to an enzyme).
+
+The purpose of this analysis is to compare the differences in fraction bound (fB) between STA treated and untreated samples.
+
+
+# Z' Factor and % Cell Viability for Fraction Bound and G-Coordinates
+
+```{r FB, echo=FALSE, warning=FALSE, message=FALSE}
+
+
+# FB Z' FACTOR
+
+# Three conditions: "untreated" "STA-1uM"   "STA-0-1uM"
+
+
+df1 <- df1 %>%  
+  group_by(Experiment) %>%
+  mutate(cv_fb = sd(fB, na.rm = TRUE)/mean(fB, na.rm = TRUE)*100) %>%
+
+  # Low control (STA-0-1uM)
+  mutate(ctrl_0_mean_fb = mean(fB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         ctrl_0_sd_fb = sd(fB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_fb = fB - ctrl_0_mean_fb,
+
+        #High control (STA-1uM)
+         ctrl_100_mean_fb = mean(fB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_minus_mean_fb = mean(signal_minus_ctrl_0_mean_fb[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_sd_fb = sd(fB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         z_prime_factor_fb = 1 - (3*ctrl_100_sd_fb + 3*ctrl_0_sd_fb)/abs(ctrl_100_mean_fb - ctrl_0_mean_fb),
+         plate_cv_fb = mean(cv_fb, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
+
+
+z_prime <- df1$z_prime_factor_fb
+plate_cv <- df1$plate_cv_fb
+
+summary_df1 <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
+summary_df1 <- summary_df1[1, , drop = FALSE]
+
+kable(summary_df1, caption = "Fraction Bound Z'factor and %CV")
+```
+
+
+```{r mean_fb, echo=FALSE, warning=FALSE, message=FALSE}
+
+# MEAN FB Z' FACTOR
+
+avg_new_df <- avg_new_df %>%  
+  group_by(Experiment) %>%
+  mutate(cv_mean_fb_mean = sd(meanfB, na.rm = TRUE)/mean(meanfB, na.rm = TRUE)*100) %>%
+  
+  #Low control
+  mutate(ctrl_0_mean_fb_mean = mean(meanfB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         ctrl_0_sd_fb_mean = sd(meanfB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_fb_mean = meanfB - ctrl_0_mean_fb_mean,
+         #High control
+         ctrl_100_mean_fb_mean = mean(meanfB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_minus_mean_fb_mean = mean(signal_minus_ctrl_0_mean_fb_mean[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_sd_fb_mean = sd(meanfB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         z_prime_factor_mean_fb = 1 - (3*ctrl_100_sd_fb_mean + 3*ctrl_0_sd_fb_mean)/abs(ctrl_100_mean_fb_mean - ctrl_0_mean_fb_mean),
+         plate_cv_mean_fb = mean(cv_mean_fb_mean, na.rm = TRUE)) %>%
+         ungroup()
+
+z_prime_mean <- avg_new_df$z_prime_factor_mean_fb
+plate_cv_mean <- avg_new_df$plate_cv_mean_fb
+
+
+summary_df2 <- data.frame(z_prime_factor = z_prime_mean, percent_cv = plate_cv_mean)
+summary_df2 <- summary_df2[1, , drop = FALSE]
+
+
+library(knitr)
+
+kable(summary_df2, caption = "Mean Fraction Bound Z'factor and %CV")
+
+
+```
+```{r gcoord, echo=FALSE, warning=FALSE, message=FALSE}
+
+# G-COORDINATE Z' FACTOR
+
+
+df1 <- df1 %>%  
+  group_by(Experiment) %>% 
+  mutate(cv_g = sd(G, na.rm = TRUE)/mean(G, na.rm = TRUE)*100) %>%
+  
+  #Low control
+  mutate(ctrl_0_mean_g = mean(G[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         ctrl_0_sd_g = sd(G[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_g = G - ctrl_0_mean_g,
+         #High control
+         ctrl_100_mean_g = mean(G[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_minus_mean_g = mean(signal_minus_ctrl_0_mean_g[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_sd_g = sd(G[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         z_prime_factor_g = 1 - (3*ctrl_100_sd_g + 3*ctrl_0_sd_g)/abs(ctrl_100_mean_g - ctrl_0_mean_g),
+         plate_cv_g = mean(cv_g, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
+
+
+z_prime <- df1$z_prime_factor_g
+plate_cv <- df1$plate_cv_g
+
+summary_df3 <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
+summary_df3 <- summary_df3[1, , drop = FALSE]
+
+library(knitr)
+
+kable(summary_df3, caption = "G-Coordinate Z'factor and %CV")
+
+
+```
+
+```{r mean gcoord, echo=FALSE, warning=FALSE, message=FALSE}
+
+# MEAN G-COORDINATE Z' FACTOR
+
+
+avg_new_df <- avg_new_df %>%  
+  group_by(Experiment) %>%
+  mutate(cv_mean_g_mean = sd(meanG, na.rm = TRUE)/mean(meanG, na.rm = TRUE)*100) %>%
+  
+  #Low control
+  mutate(ctrl_0_mean_g_mean = mean(meanG[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         ctrl_0_sd_g_mean = sd(meanG[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_g_mean = meanG - ctrl_0_mean_g_mean,
+         # High control
+         ctrl_100_mean_g_mean = mean(meanG[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_minus_mean_g_mean = mean(signal_minus_ctrl_0_mean_g_mean[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         ctrl_100_sd_g_mean = sd(meanG[Replicate_Group == "STA-1uM"], na.rm = TRUE),
+         z_prime_factor_mean_g = 1 - (3*ctrl_100_sd_g_mean + 3*ctrl_0_sd_g_mean)/abs(ctrl_100_mean_g_mean - ctrl_0_mean_g_mean),
+         plate_cv_mean_g = mean(cv_mean_g_mean, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
+
+
+z_prime_mean_g_coord <- avg_new_df$z_prime_factor_mean_g
+plate_cv_mean_g_coord <- avg_new_df$plate_cv_mean_g
+
+
+summary_df4 <- data.frame(z_prime_factor = z_prime_mean_g_coord, percent_cv = plate_cv_mean_g_coord)
+summary_df4 <- summary_df4[1, , drop = FALSE]
+
+library(knitr)
+
+kable(summary_df4, caption = "Mean G-Coordinate Z'factor and %CV")
+
+
+
+
+
+
+
+
+
+```
+
+# Scatterplot of S- & G- Coordinates of STA Treatments
+
+
+```{r plot1, echo=FALSE, warning=FALSE, message=FALSE,  fig.width=13, fig.height=10, dpi=330}
+
+library(ggplot2)
+library(viridis)
+
+
+
+# previously colored by Plate)ID (org1) but this is only 1 plate.
+
+
+
+
+
+scatterplot <- ggplot(df1, aes(x=G, y=S, color =Experiment)) + geom_point(size=4) + facet_wrap(~Replicate_Group + Concentration_uM) + labs(x = "G-coordinate", y = "S-coordinate", color = "Experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
+
+
+scatterplot
+
+
+
+
+```
+
+
+
+
+# Mixed Effects Models (Fraction Bound)
+
+
+```{r boxplot, echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=9, dpi=300}
+
+#setting up STA-1uM_df
+
+library(dplyr)
+library(ggplot2)
+library(lme4)
+library(ggbeeswarm)
+
+df_all <- df1 %>% mutate(Concentration = case_when(
+  Replicate_Group == "untreated" ~ 0,
+  Replicate_Group == "STA-0-1uM" ~ 0.1,
+  Replicate_Group == "STA-1uM" ~ 1,
+  TRUE ~ NA_real_
+))
+
+
+averages <- df_all %>%
+  group_by(Experiment, Concentration) %>%
+  summarize(mean_fB = mean(fB, na.rm=TRUE), .groups='drop')
+
+
+
+box_superplot <- ggplot(df_all, aes(x = as.factor(Concentration), y = fB)) + 
+  geom_boxplot(outlier.shape = NA, alpha = 0.9) +
+  geom_quasirandom(aes(color = as.factor(Experiment)), size = 2, alpha = 0.9) +
+  geom_beeswarm(data = averages, aes(x = as.factor(Concentration), y = mean_fB,color = as.factor(Experiment)), size = 5)+ 
+  scale_color_brewer(palette = "Dark2") +
+  theme_bw(base_size=20) +
+  ggtitle("Fraction Bound Across Conditions") +
+  labs(x = "STA Concentration uM", y = "Fraction Bound", color = "Experiment")
+  
+  
+box_superplot
+
+```
+
+
+
+
+
+
+
+
+
+```{r fixed, echo=FALSE, warning=FALSE, message=FALSE, fig.width=11, fig.height=9, dpi=300}
+
+
+
+
+# Fixed effects model (not considering experiment)
+invisible(fixed_effects_model <- lm(fB ~ Concentration, data = df_all))
+
+
+# Fixed effects plot
+fixed_plot <- ggplot(data = df_all, aes(x = Concentration, y = fB)) +
+    geom_point(alpha=0.9, color = "darkgray", size =3) +
+    geom_smooth(method = "lm", se = FALSE, color = "black") +
+    theme_bw(base_size=20) +
+    ggtitle("STA Fraction Bound") + 
+    labs(subtitle = "Fixed Effects Visualizer") +
+    ylab("Fraction Bound") +
+    xlab("STA Concentration (uM)")
+  
+
+fixed_plot
+
+```
+
+
+
+
+
+
+
+```{r mem, echo=FALSE, warning=FALSE, message=FALSE,fig.width=12, fig.height=9, dpi=300}
+# Mixed effects model
+invisible(mixed_effects_model <- lmer(fB ~ Concentration  + (1 | Experiment), data=df_all))
+
+
+mixed_effects_plot_w_date <- ggplot(data = df_all, aes(x = Concentration, y = fB, color = as.factor(Experiment))) +
+  geom_point(alpha=0.9, size=3) +
+    geom_smooth(method = "lm", aes(group=Experiment), se = FALSE, size =1.2) +
+  theme_bw(base_size=20) +
+  scale_color_brewer(palette = "Dark2") +
+    ggtitle("STA Fraction Bound") + 
+    labs(subtitle = "Mixed Effects Visualizer") +
+    labs(x = "STA Concentration (uM)", y = "Fraction Bound", color = "Experiment")
+
+
+mixed_effects_plot_w_date
+
+
+
+```
+
+The mixed effect model examines the effects of STA Concentration on fraction bound, with experiment as a random variable to assess differences between experiment runs.
+

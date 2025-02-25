@@ -21,3 +21,12 @@ df <- all_paths %>%
   map(read_data) %>%
   bind_rows()
 
+library(dplyr)
+library(knitr)
+
+avg_df <- df %>% group_by(sample_id) %>% mutate(mean_g_coord = mean(g), mean_f_b = mean(f_b))  %>% ungroup()
+
+
+saveRDS(df, file = here("data", paste0("data_cleaning_output1_", ".RDS")))
+saveRDS(avg_df, file = here("data", paste0("data_cleaning_output_avg1_", ".RDS")))
+

@@ -1,10 +1,9 @@
 ---
-title: "FLIM Z'factor and %CV"
+title: "FLIM Analysis Template"
 output: word_document
-date: "2024-10-25"
+date: "2024-11-13"
 author: "Sevde Coban"
 ---
-
 
 ```{r setup, include=FALSE, echo=FALSE, message= FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -12,12 +11,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```
 
+# Purpose
+
+FLIM collects photon excitation information from cell images to examine metabolic changes within biologic samples. This information is Fourier transformed to collect two parameters: S-coordinate and G-coordinate. These parameters are used to calculate fraction bound (fB), which is the fraction of bound to unbound NADH within the cells we’re looking at. Fraction bound can tell you if the cells are using more glycolysis (more free NADH) or oxidative phosphorylation (more NADH is bound to an enzyme).
+
+The purpose of this analysis is to compare the differences in fraction bound (fB) between conditions between the treatments DMSO and Osimertinib.
+
+
+# Z' Factor and % Cell Viability for Fraction Bound and G-Coordinates
+
 ```{r fb, echo=FALSE, warning=FALSE, message=FALSE}
 library(dplyr)
 library(here)
 
-
 df <- readRDS(here("data", paste0("data_cleaning_output_", ".RDS")))
+avg_df <- readRDS(here("data", paste0("data_cleaning_output_avg_", ".RDS")))
 
 df <- df %>%  
   group_by(scan_date) %>%
@@ -55,17 +63,42 @@ kable(summary_df, caption = "Fraction Bound Z'factor and %CV")
 
 
 
-Scatterplots:
 
-```{r scatterplot, echo=FALSE, warning=FALSE, message=FALSE}
-
-library(ggplot2)
+```{r mean_fb, echo=FALSE, warning=FALSE, message=FALSE}
 
 
-scatterplot <- ggplot(df, aes(x=g, y=s, color = plate_id)) + geom_point() + facet_wrap(~treatment + concentration) + labs(x = "g-coordinate", y = "s-coordinate", color = "Plate_ID") 
+avg_df <- avg_df %>%  
+  group_by(scan_date) %>%
+  mutate(cv_mean_fb_mean = sd(mean_f_b, na.rm = TRUE)/mean(mean_f_b, na.rm = TRUE)*100) %>%
+  #Osim is low control
+  #DMSO is high control
+  mutate(ctrl_0_mean_fb_mean = mean(mean_f_b[treatment == "Osimertinib"], na.rm = TRUE),
+         ctrl_0_sd_fb_mean = sd(mean_f_b[treatment == "Osimertinib"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_fb_mean = mean_f_b - ctrl_0_mean_fb_mean,
+         #take the positive control mean
+         ctrl_100_mean_fb_mean = mean(mean_f_b[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_minus_mean_fb_mean = mean(signal_minus_ctrl_0_mean_fb_mean[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_sd_fb_mean = sd(mean_f_b[treatment == "DMSO"], na.rm = TRUE),
+         z_prime_factor_mean_fb = 1 - (3*ctrl_100_sd_fb_mean + 3*ctrl_0_sd_fb_mean)/abs(ctrl_100_mean_fb_mean - ctrl_0_mean_fb_mean),
+         plate_cv_mean_fb = mean(cv_mean_fb_mean, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
 
 
-scatterplot
+z_prime_mean_f_b <- avg_df$z_prime_factor_mean_fb
+plate_cv_mean_fb <- avg_df$plate_cv_mean_fb
+plate_id_mean_fb <- avg_df$plate_id
+
+summary_df2 <- data.frame(plate_id = plate_id_mean_fb, z_prime_factor = z_prime_mean_f_b, percent_cv = plate_cv_mean_fb)
+summary_df2 <- summary_df2[1, , drop = FALSE]
+
+library(knitr)
+
+kable(summary_df2, caption = "Mean Fraction Bound Z'factor and %CV")
 
 
 
@@ -122,20 +155,91 @@ kable(summary_df2, caption = "G-Coordinate Z'factor and %CV")
 ```
 
 
+```{r mean gcoord, echo=FALSE, warning=FALSE, message=FALSE}
+
+avg_df <- avg_df %>%  
+  group_by(scan_date) %>%
+  mutate(cv_mean_g_mean = sd(mean_g_coord, na.rm = TRUE)/mean(mean_g_coord, na.rm = TRUE)*100) %>%
+  #Osim is low control
+  #DMSO is high control
+  mutate(ctrl_0_mean_g_mean = mean(mean_g_coord[treatment == "Osimertinib"], na.rm = TRUE),
+         ctrl_0_sd_g_mean = sd(mean_g_coord[treatment == "Osimertinib"], na.rm = TRUE),
+         #take signal minus the DMSO_mean
+         #(this is divided by positive control to get our normalized signal)
+         signal_minus_ctrl_0_mean_g_mean = mean_g_coord - ctrl_0_mean_g_mean,
+         #take the positive control mean
+         ctrl_100_mean_g_mean = mean(mean_g_coord[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_minus_mean_g_mean = mean(signal_minus_ctrl_0_mean_g_mean[treatment == "DMSO"], na.rm = TRUE),
+         ctrl_100_sd_g_mean = sd(mean_g_coord[treatment == "DMSO"], na.rm = TRUE),
+         z_prime_factor_mean_g = 1 - (3*ctrl_100_sd_g_mean + 3*ctrl_0_sd_g_mean)/abs(ctrl_100_mean_g_mean - ctrl_0_mean_g_mean),
+         plate_cv_mean_g = mean(cv_mean_g_mean, na.rm = TRUE)) %>%
+        mutate(dmso_percent = NA,
+         starting_media = NA,
+         day = NA,
+         reader = NA) %>% ungroup()
 
 
+z_prime_mean_g_coord <- avg_df$z_prime_factor_mean_g
+plate_cv_mean_g_coord <- avg_df$plate_cv_mean_g
+plate_id_mean_g <- avg_df$plate_id
 
+summary_df2 <- data.frame(plate_id = plate_id_mean_g, z_prime_factor = z_prime_mean_g_coord, percent_cv = plate_cv_mean_g_coord)
+summary_df2 <- summary_df2[1, , drop = FALSE]
 
-Average g-coordinates across z-slice for each sample:
-```{r avg z slices, echo=FALSE, warning=FALSE, message=FALSE}
-library(dplyr)
 library(knitr)
 
+kable(summary_df2, caption = "Mean G-Coordinate Z'factor and %CV")
 
-df <- df %>% group_by(sample_id) %>% mutate(mean_g_coord = mean(g)) %>% ungroup()
 
-summary_df <- df %>% select(sample_id, mean_g_coord) %>% distinct()
-kable(summary_df, col.names = c("Sample ID", "Mean g-coordinate"), caption = "Mean g-coordinate per sample")
+
+
+
+
+
+
+
+```
+
+# Scatterplot of S- & G- Coordinates of Treatments DMSO, Osimertinib, and Temsirolimus
+
+
+```{r plot, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+
+library(ggplot2)
+library(viridis)
+
+
+scatterplot <- ggplot(df, aes(x=g, y=s, color = plate_id)) + geom_point(size=2) + facet_wrap(~treatment + concentration) + labs(x = "g-coordinate", y = "s-coordinate", color = "Plate_ID") + scale_color_manual(values = c("darkolivegreen4", "darksalmon", "lightblue")) + theme_bw() + ggtitle("S- & G- Coordinates") 
+
+
+scatterplot
+
+
+
+
+
+
+
+```
+
+
+```{r same distribution, echo=FALSE, warning=FALSE, message=FALSE}
+
+set.seed(200)
+
+same_dist_df <- df
+
+numeric_columns <- sapply(same_dist_df, is.numeric)
+for (col in names(same_dist_df)[numeric_columns]) {
+  mean_val <- mean(df[[col]])
+  sd_val <- sd(df[[col]])
+  same_dist_df[[col]] <- rnorm(nrow(df), mean = mean_val, sd = sd_val)
+}
+
+same_dist_df$plate_id <- "UP02"
+same_dist_df <- same_dist_df[sample(nrow(same_dist_df)), ]
+
+
 
 ```
 
@@ -143,25 +247,181 @@ kable(summary_df, col.names = c("Sample ID", "Mean g-coordinate"), caption = "Me
 
 
 
+```{r different_dist, echo=FALSE, warning=FALSE, message=FALSE}
+
+different_dist_df <- df
+
+set.seed(200)
+
+numeric_columns_diff <- sapply(different_dist_df, is.numeric)
+for (col in names(different_dist_df)[numeric_columns]) {
+  mean_val_diff <- mean(df[[col]])
+  sd_val_diff <- sd(df[[col]])
+  different_dist_df[[col]] <- rnorm(nrow(df), mean = mean_val_diff + 10, sd = sd_val_diff *2)
+}
+
+different_dist_df$plate_id <- "UP03"
+different_dist_df <- different_dist_df[sample(nrow(different_dist_df)), ]
+
+
+```
+
+# Mixed Effects Models
+
+## DMSO
+
+
+```{r mem, echo=FALSE, warning=FALSE, message=FALSE}
+
+#setting up dmso_df
+
+library(dplyr)
+library(ggplot2)
+library(lme4)
+
+df <- df %>% mutate(plate_id = "UP01")
+same_dist_df <- same_dist_df %>% mutate(plate_id = "UP02")
+different_dist_df <- different_dist_df %>% mutate(plate_id = "UP03")
+
+combined_df <- bind_rows(df, same_dist_df, different_dist_df)
+
+dmso_df <- combined_df %>% filter(treatment == "DMSO")
+
+model <- lmer(f_b ~ concentration + (1 | plate_id), data = dmso_df)
+
+summary(model)
+  
+plot <- ggplot(data = dmso_df, aes(x = concentration, y = f_b)) +
+    geom_point(color = "gray") +
+    geom_smooth(method = "lm", se = FALSE, color = "black") +
+    theme_bw() +
+    facet_wrap(~ cell_line) +
+    ggtitle("Fraction Bound") + 
+    labs(subtitle = "Fixed Effects Visualizer") +
+    ylab("Fraction Bound (f_b)") +
+    xlab("Concentration (uM)")
+    
+plot_w_date <- ggplot(data = dmso_df, aes(x = concentration, y = f_b)) +
+    geom_point(aes(color = as.factor(plate_id))) +
+    geom_smooth(aes(color = as.factor(plate_id), group = plate_id), method = "lm", se = FALSE) +
+    theme_bw() +
+    facet_wrap(~ cell_line) +
+    scale_color_viridis_d() +
+    ggtitle("Fraction Bound") + 
+    labs(subtitle = "Mixed Effects Visualizer") +
+    labs(color = "Scan Date") +
+    ylab("Fraction Bound (f_b)") +
+    xlab("Concentration (uM)")
+
+
+plot
+plot_w_date
+
+
+```
+
+## Osimertinib
+
+
+```{r mem2, echo=FALSE, warning=FALSE, message=FALSE}
+
+#setting up dmso_df
+
+library(dplyr)
+library(ggplot2)
+library(lme4)
+
+df <- df %>% mutate(plate_id = "UP01")
+same_dist_df <- same_dist_df %>% mutate(plate_id = "UP02")
+different_dist_df <- different_dist_df %>% mutate(plate_id = "UP03")
+
+combined_df <- bind_rows(df, same_dist_df, different_dist_df)
+
+os_df <- combined_df %>% filter(treatment == "Osimertinib")
+
+model <- lmer(f_b ~ concentration + (1 | plate_id), data = dmso_df)
+
+summary(model)
+  
+plot <- ggplot(data = dmso_df, aes(x = concentration, y = f_b)) +
+    geom_point(color = "gray") +
+    geom_smooth(method = "lm", se = FALSE, color = "black") +
+    theme_bw() +
+    facet_wrap(~ cell_line) +
+    ggtitle("Fraction Bound") + 
+    labs(subtitle = "Fixed Effects Visualizer") +
+    ylab("Fraction Bound (f_b)") +
+    xlab("Concentration (uM)")
+    
+plot_w_date <- ggplot(data = os_df, aes(x = concentration, y = f_b)) +
+    geom_point(aes(color = as.factor(plate_id))) +
+    geom_smooth(aes(color = as.factor(plate_id), group = plate_id), method = "lm", se = FALSE) +
+    theme_bw() +
+    facet_wrap(~ cell_line) +
+    scale_color_viridis_d() +
+    ggtitle("Fraction Bound") + 
+    labs(subtitle = "Mixed Effects Visualizer") +
+    labs(color = "Scan Date") +
+    ylab("Fraction Bound (f_b)") +
+    xlab("Concentration (uM)")
+
+
+plot
+plot_w_date
 
 
 
+```
+## Temsirolimus
+
+```{r mem3, echo=FALSE, warning=FALSE, message=FALSE}
+
+#setting up dmso_df
+
+library(dplyr)
+library(ggplot2)
+library(lme4)
+
+df <- df %>% mutate(plate_id = "UP01")
+same_dist_df <- same_dist_df %>% mutate(plate_id = "UP02")
+different_dist_df <- different_dist_df %>% mutate(plate_id = "UP03")
+
+combined_df <- bind_rows(df, same_dist_df, different_dist_df)
+
+tem_df <- combined_df %>% filter(treatment == "Temsirolimus")
+
+model <- lmer(f_b ~ concentration + (1 | plate_id), data = dmso_df)
+
+summary(model)
+  
+plot <- ggplot(data = tem_df, aes(x = concentration, y = f_b)) +
+    geom_point(color = "gray") +
+    geom_smooth(method = "lm", se = FALSE, color = "black") +
+    theme_bw() +
+    facet_wrap(~ cell_line) +
+    ggtitle("Fraction Bound") + 
+    labs(subtitle = "Fixed Effects Visualizer") +
+    ylab("Fraction Bound (f_b)") +
+    xlab("Concentration (uM)")
+    
+plot_w_date <- ggplot(data = dmso_df, aes(x = concentration, y = f_b)) +
+    geom_point(aes(color = as.factor(plate_id))) +
+    geom_smooth(aes(color = as.factor(plate_id), group = plate_id), method = "lm", se = FALSE) +
+    theme_bw() +
+    facet_wrap(~ cell_line) +
+    scale_color_viridis_d() +
+    ggtitle("Fraction Bound") + 
+    labs(subtitle = "Mixed Effects Visualizer") +
+    labs(color = "Scan Date") +
+    ylab("Fraction Bound (f_b)") +
+    xlab("Concentration (uM)")
+
+
+plot
+plot_w_date
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```
 
 
