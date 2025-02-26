@@ -1,10 +1,9 @@
 ---
 title: "FLIM Analysis Template"
 output: word_document
-date: "2025-02-25"
+date: "2025-02-26"
 author: "Sevde Coban"
 ---
-
 
 ```{r setup, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
 library(dplyr)
@@ -14,28 +13,36 @@ library(knitr)
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(fig.width=12, fig.heaight=12, dpi=330)
-
-df1 <- readRDS(here("data", paste0("data_cleaning_outputnew_", ".RDS")))
-avg_new_df <- readRDS(here("data", paste0("data_cleaning_outputnew_avg", ".RDS")))
+local_dest <- "/Users/scoban/Documents/Github/flim_pipeline/data"
 
 
+# Import data
+#dataframe is data imported using data_cleaning.R function
+dataframe <- readRDS(file.path(local_dest, paste0("data_cleaning_outputnew_", ".RDS")))
+# average_dataframe is a df of the mean G and mean fB
+average_dataframe <- readRDS(file.path(local_dest, paste0("data_cleaning_outputnew_avg_", ".RDS")))
 
-# Create concentration column
-df1 <- df1 %>%
-  mutate(Concentration_uM = case_when(
-    str_detect(Replicate_Group, "STA-1uM") ~ "1",
-    str_detect(Replicate_Group, "STA-0-1uM") ~ "0.1",
-    str_detect(Replicate_Group, "untreated") ~ "0"
-  ))
+# Function to extract concentration from the 'Replicate_Group' column
+extract_concentration <- function(dataframe, replicate_group_column) {
+  get_concentration <- function(value) {
+    if (grepl("untreated", value)) {
+      return(0)
+    }
+    value <- gsub("STA-", "", value)
+    value <- gsub("([0-9])-([0-9])", "\\1.\\2", value)
+    value <- gsub("-", "", value)
+    concentration <- gsub("uM", "", value)
+  
+    return(as.numeric(concentration))
+  }
+  
+  dataframe$Concentration_uM <- sapply(dataframe[[replicate_group_column]], get_concentration)
+  return(dataframe)
+}
 
-avg_new_df <- avg_new_df %>%
-  mutate(Concentration_uM = case_when(
-    str_detect(Replicate_Group, "STA-1uM") ~ "1",
-    str_detect(Replicate_Group, "STA-0-1uM") ~ "0.1",
-    str_detect(Replicate_Group, "untreated") ~ "0"
-  ))
 
-
+dataframe <- dataframe %>% extract_concentration('Replicate_Group')
+average_dataframe <-average_dataframe %>% extract_concentration('Replicate_Group')
 
 ```
 
@@ -54,9 +61,9 @@ The purpose of this analysis is to compare the differences in fraction bound (fB
 # FB Z' FACTOR
 
 # Three conditions: "untreated" "STA-1uM"   "STA-0-1uM"
+# The low control is STA-0-1uM, high control is STA-1uM
 
-
-df1 <- df1 %>%  
+dataframe <- dataframe %>%  
   group_by(Experiment) %>%
   mutate(cv_fb = sd(fB, na.rm = TRUE)/mean(fB, na.rm = TRUE)*100) %>%
 
@@ -79,13 +86,13 @@ df1 <- df1 %>%
          reader = NA) %>% ungroup()
 
 
-z_prime <- df1$z_prime_factor_fb
-plate_cv <- df1$plate_cv_fb
+z_prime <- dataframe$z_prime_factor_fb
+plate_cv <- dataframe$plate_cv_fb
 
-summary_df1 <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
-summary_df1 <- summary_df1[1, , drop = FALSE]
+summary_dataframe <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
+summary_dataframe <- summary_dataframe[1, , drop = FALSE]
 
-kable(summary_df1, caption = "Fraction Bound Z'factor and %CV")
+kable(summary_dataframe, caption = "Fraction Bound Z'factor and %CV")
 ```
 
 
@@ -93,7 +100,7 @@ kable(summary_df1, caption = "Fraction Bound Z'factor and %CV")
 
 # MEAN FB Z' FACTOR
 
-avg_new_df <- avg_new_df %>%  
+average_dataframe <- average_dataframe %>%  
   group_by(Experiment) %>%
   mutate(cv_mean_fb_mean = sd(meanfB, na.rm = TRUE)/mean(meanfB, na.rm = TRUE)*100) %>%
   
@@ -111,8 +118,8 @@ avg_new_df <- avg_new_df %>%
          plate_cv_mean_fb = mean(cv_mean_fb_mean, na.rm = TRUE)) %>%
          ungroup()
 
-z_prime_mean <- avg_new_df$z_prime_factor_mean_fb
-plate_cv_mean <- avg_new_df$plate_cv_mean_fb
+z_prime_mean <- average_dataframe$z_prime_factor_mean_fb
+plate_cv_mean <- average_dataframe$plate_cv_mean_fb
 
 
 summary_df2 <- data.frame(z_prime_factor = z_prime_mean, percent_cv = plate_cv_mean)
@@ -130,7 +137,7 @@ kable(summary_df2, caption = "Mean Fraction Bound Z'factor and %CV")
 # G-COORDINATE Z' FACTOR
 
 
-df1 <- df1 %>%  
+dataframe <- dataframe %>%  
   group_by(Experiment) %>% 
   mutate(cv_g = sd(G, na.rm = TRUE)/mean(G, na.rm = TRUE)*100) %>%
   
@@ -152,8 +159,8 @@ df1 <- df1 %>%
          reader = NA) %>% ungroup()
 
 
-z_prime <- df1$z_prime_factor_g
-plate_cv <- df1$plate_cv_g
+z_prime <- dataframe$z_prime_factor_g
+plate_cv <- dataframe$plate_cv_g
 
 summary_df3 <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
 summary_df3 <- summary_df3[1, , drop = FALSE]
@@ -170,7 +177,7 @@ kable(summary_df3, caption = "G-Coordinate Z'factor and %CV")
 # MEAN G-COORDINATE Z' FACTOR
 
 
-avg_new_df <- avg_new_df %>%  
+average_dataframe <- average_dataframe %>%  
   group_by(Experiment) %>%
   mutate(cv_mean_g_mean = sd(meanG, na.rm = TRUE)/mean(meanG, na.rm = TRUE)*100) %>%
   
@@ -192,8 +199,8 @@ avg_new_df <- avg_new_df %>%
          reader = NA) %>% ungroup()
 
 
-z_prime_mean_g_coord <- avg_new_df$z_prime_factor_mean_g
-plate_cv_mean_g_coord <- avg_new_df$plate_cv_mean_g
+z_prime_mean_g_coord <- average_dataframe$z_prime_factor_mean_g
+plate_cv_mean_g_coord <- average_dataframe$plate_cv_mean_g
 
 
 summary_df4 <- data.frame(z_prime_factor = z_prime_mean_g_coord, percent_cv = plate_cv_mean_g_coord)
@@ -202,13 +209,6 @@ summary_df4 <- summary_df4[1, , drop = FALSE]
 library(knitr)
 
 kable(summary_df4, caption = "Mean G-Coordinate Z'factor and %CV")
-
-
-
-
-
-
-
 
 
 ```
@@ -225,16 +225,10 @@ library(viridis)
 
 # previously colored by Plate)ID (org1) but this is only 1 plate.
 
-
-
-
-
-scatterplot <- ggplot(df1, aes(x=G, y=S, color =Experiment)) + geom_point(size=4) + facet_wrap(~Replicate_Group + Concentration_uM) + labs(x = "G-coordinate", y = "S-coordinate", color = "Experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
+scatterplot <- ggplot(dataframe, aes(x=G, y=S, color =Experiment)) + geom_point(size=4) + facet_wrap(~Replicate_Group + Concentration_uM) + labs(x = "G-coordinate", y = "S-coordinate", color = "Experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
 
 
 scatterplot
-
-
 
 
 ```
@@ -254,7 +248,7 @@ library(ggplot2)
 library(lme4)
 library(ggbeeswarm)
 
-df_all <- df1 %>% mutate(Concentration = case_when(
+df_all <- dataframe %>% mutate(Concentration = case_when(
   Replicate_Group == "untreated" ~ 0,
   Replicate_Group == "STA-0-1uM" ~ 0.1,
   Replicate_Group == "STA-1uM" ~ 1,
