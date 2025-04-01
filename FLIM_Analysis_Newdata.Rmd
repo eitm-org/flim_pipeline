@@ -1,15 +1,19 @@
 ---
 title: "FLIM Analysis Template"
 output: word_document
-date: "2025-02-26"
+date: "2025-03-11"
 author: "Sevde Coban"
 ---
 
 ```{r setup, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+
+# Set up
+
 library(dplyr)
 library(here)
 library(stringr)
 library(knitr)
+source("/Users/scoban/Documents/Github/danGoat/R/new_data_cleaner.R")
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(fig.width=12, fig.heaight=12, dpi=330)
@@ -18,32 +22,42 @@ local_dest <- "/Users/scoban/Documents/Github/flim_pipeline/data"
 
 # Import data
 #dataframe is data imported using data_cleaning.R function
-dataframe <- readRDS(file.path(local_dest, paste0("data_cleaning_outputnew_", ".RDS")))
+dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_outputnew_", ".RDS")))
 # average_dataframe is a df of the mean G and mean fB
-average_dataframe <- readRDS(file.path(local_dest, paste0("data_cleaning_outputnew_avg_", ".RDS")))
+average_dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_outputnew_avg_", ".RDS")))
 
+```
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
 # Function to extract concentration from the 'Replicate_Group' column
-extract_concentration <- function(dataframe, replicate_group_column) {
+extract_concentration <- function(dataframe, replicate_group_column = "Replicate_Group") {
   get_concentration <- function(value) {
-    if (grepl("untreated", value)) {
+    # Extract last part after underscore
+    treatment <- sub(".*_", "", value)
+
+    if (tolower(treatment) == "untreated") {
       return(0)
     }
-    value <- gsub("STA-", "", value)
-    value <- gsub("([0-9])-([0-9])", "\\1.\\2", value)
-    value <- gsub("-", "", value)
-    concentration <- gsub("uM", "", value)
-  
-    return(as.numeric(concentration))
+
+    treatment <- gsub("STA-", "", treatment)
+    treatment <- gsub("([0-9]+)-([0-9]+)", "\\1.\\2", treatment)  # 0-1 → 0.1
+    treatment <- gsub("uM", "", treatment)
+
+    numeric_value <- suppressWarnings(as.numeric(treatment))
+    if (is.na(numeric_value)) {
+      warning(paste("Could not extract concentration from:", value))
+    }
+
+    return(numeric_value)
   }
-  
-  dataframe$Concentration_uM <- sapply(dataframe[[replicate_group_column]], get_concentration)
+
+  dataframe$Concentration <- sapply(dataframe[[replicate_group_column]], get_concentration)
   return(dataframe)
 }
-
-
-dataframe <- dataframe %>% extract_concentration('Replicate_Group')
-average_dataframe <-average_dataframe %>% extract_concentration('Replicate_Group')
-
 ```
 
 # Purpose
@@ -53,165 +67,111 @@ FLIM collects photon excitation information from cell images to examine metaboli
 The purpose of this analysis is to compare the differences in fraction bound (fB) between STA treated and untreated samples.
 
 
-# Z' Factor and % Cell Viability for Fraction Bound and G-Coordinates
+# Z' Factors for Fraction Bound and G-Coordinates
+```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
 
-```{r FB, echo=FALSE, warning=FALSE, message=FALSE}
+# Function to calculate z' factor
 
+calculate_zprime <- function(df, value_col, replicate_col = "Replicate_Group") {
+  df_list <- list()
 
-# FB Z' FACTOR
+  for (exp in unique(df$Experiment)) {
+    sub_df <- df[df$Experiment == exp, ]
+    x <- sub_df[[value_col]]
+    rep_group <- sub_df[[replicate_col]]
 
-# Three conditions: "untreated" "STA-1uM"   "STA-0-1uM"
-# The low control is STA-0-1uM, high control is STA-1uM
+    # Use grepl to find control groups
+    ctrl_0_vals <- x[grepl("STA-0-1uM", rep_group)]
+    ctrl_100_vals <- x[grepl("STA-1uM", rep_group)]
 
-dataframe <- dataframe %>%  
-  group_by(Experiment) %>%
-  mutate(cv_fb = sd(fB, na.rm = TRUE)/mean(fB, na.rm = TRUE)*100) %>%
+    if (length(ctrl_0_vals) >= 2 && length(ctrl_100_vals) >= 2) {
+      ctrl_0_mean <- mean(ctrl_0_vals, na.rm = TRUE)
+      ctrl_0_sd <- sd(ctrl_0_vals, na.rm = TRUE)
+      ctrl_100_mean <- mean(ctrl_100_vals, na.rm = TRUE)
+      ctrl_100_sd <- sd(ctrl_100_vals, na.rm = TRUE)
 
-  # Low control (STA-0-1uM)
-  mutate(ctrl_0_mean_fb = mean(fB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         ctrl_0_sd_fb = sd(fB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         #take signal minus the DMSO_mean
-         #(this is divided by positive control to get our normalized signal)
-         signal_minus_ctrl_0_mean_fb = fB - ctrl_0_mean_fb,
+      if (!is.na(ctrl_0_mean) && !is.na(ctrl_100_mean) && ctrl_0_mean != ctrl_100_mean) {
+        z_prime <- 1 - (3 * ctrl_0_sd + 3 * ctrl_100_sd) / abs(ctrl_100_mean - ctrl_0_mean)
+      } else {
+        z_prime <- NA_real_
+      }
+    } else {
+      z_prime <- NA_real_
+    }
 
-        #High control (STA-1uM)
-         ctrl_100_mean_fb = mean(fB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_minus_mean_fb = mean(signal_minus_ctrl_0_mean_fb[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_sd_fb = sd(fB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         z_prime_factor_fb = 1 - (3*ctrl_100_sd_fb + 3*ctrl_0_sd_fb)/abs(ctrl_100_mean_fb - ctrl_0_mean_fb),
-         plate_cv_fb = mean(cv_fb, na.rm = TRUE)) %>%
-        mutate(dmso_percent = NA,
-         starting_media = NA,
-         day = NA,
-         reader = NA) %>% ungroup()
+    df_list[[exp]] <- data.frame(Experiment = exp, z_prime_factor = z_prime)
+  }
 
-
-z_prime <- dataframe$z_prime_factor_fb
-plate_cv <- dataframe$plate_cv_fb
-
-summary_dataframe <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
-summary_dataframe <- summary_dataframe[1, , drop = FALSE]
-
-kable(summary_dataframe, caption = "Fraction Bound Z'factor and %CV")
+  return(do.call(rbind, df_list))
+}
 ```
 
 
-```{r mean_fb, echo=FALSE, warning=FALSE, message=FALSE}
-
-# MEAN FB Z' FACTOR
-
-average_dataframe <- average_dataframe %>%  
-  group_by(Experiment) %>%
-  mutate(cv_mean_fb_mean = sd(meanfB, na.rm = TRUE)/mean(meanfB, na.rm = TRUE)*100) %>%
-  
-  #Low control
-  mutate(ctrl_0_mean_fb_mean = mean(meanfB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         ctrl_0_sd_fb_mean = sd(meanfB[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         #take signal minus the DMSO_mean
-         #(this is divided by positive control to get our normalized signal)
-         signal_minus_ctrl_0_mean_fb_mean = meanfB - ctrl_0_mean_fb_mean,
-         #High control
-         ctrl_100_mean_fb_mean = mean(meanfB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_minus_mean_fb_mean = mean(signal_minus_ctrl_0_mean_fb_mean[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_sd_fb_mean = sd(meanfB[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         z_prime_factor_mean_fb = 1 - (3*ctrl_100_sd_fb_mean + 3*ctrl_0_sd_fb_mean)/abs(ctrl_100_mean_fb_mean - ctrl_0_mean_fb_mean),
-         plate_cv_mean_fb = mean(cv_mean_fb_mean, na.rm = TRUE)) %>%
-         ungroup()
-
-z_prime_mean <- average_dataframe$z_prime_factor_mean_fb
-plate_cv_mean <- average_dataframe$plate_cv_mean_fb
 
 
-summary_df2 <- data.frame(z_prime_factor = z_prime_mean, percent_cv = plate_cv_mean)
-summary_df2 <- summary_df2[1, , drop = FALSE]
-
-
-library(knitr)
-
-kable(summary_df2, caption = "Mean Fraction Bound Z'factor and %CV")
-
+```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+# Extract concentrations
+dataframe <- extract_concentration(dataframe)
+average_dataframe <- extract_concentration(average_dataframe)
 
 ```
-```{r gcoord, echo=FALSE, warning=FALSE, message=FALSE}
-
-# G-COORDINATE Z' FACTOR
 
 
-dataframe <- dataframe %>%  
-  group_by(Experiment) %>% 
-  mutate(cv_g = sd(G, na.rm = TRUE)/mean(G, na.rm = TRUE)*100) %>%
-  
-  #Low control
-  mutate(ctrl_0_mean_g = mean(G[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         ctrl_0_sd_g = sd(G[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         #take signal minus the DMSO_mean
-         #(this is divided by positive control to get our normalized signal)
-         signal_minus_ctrl_0_mean_g = G - ctrl_0_mean_g,
-         #High control
-         ctrl_100_mean_g = mean(G[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_minus_mean_g = mean(signal_minus_ctrl_0_mean_g[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_sd_g = sd(G[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         z_prime_factor_g = 1 - (3*ctrl_100_sd_g + 3*ctrl_0_sd_g)/abs(ctrl_100_mean_g - ctrl_0_mean_g),
-         plate_cv_g = mean(cv_g, na.rm = TRUE)) %>%
-        mutate(dmso_percent = NA,
-         starting_media = NA,
-         day = NA,
-         reader = NA) %>% ungroup()
 
-
-z_prime <- dataframe$z_prime_factor_g
-plate_cv <- dataframe$plate_cv_g
-
-summary_df3 <- data.frame(z_prime_factor = z_prime, percent_cv = plate_cv)
-summary_df3 <- summary_df3[1, , drop = FALSE]
-
-library(knitr)
-
-kable(summary_df3, caption = "G-Coordinate Z'factor and %CV")
+```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+# Finding z' values (mean and raw)
+zprime_fb_raw  <- calculate_zprime(dataframe, "fB")
+zprime_g_raw   <- calculate_zprime(dataframe, "G")
+zprime_fb_avg  <- calculate_zprime(average_dataframe, "meanfB")
+zprime_g_avg   <- calculate_zprime(average_dataframe, "meanG")
 
 
 ```
 
-```{r mean gcoord, echo=FALSE, warning=FALSE, message=FALSE}
 
-# MEAN G-COORDINATE Z' FACTOR
-
-
-average_dataframe <- average_dataframe %>%  
-  group_by(Experiment) %>%
-  mutate(cv_mean_g_mean = sd(meanG, na.rm = TRUE)/mean(meanG, na.rm = TRUE)*100) %>%
-  
-  #Low control
-  mutate(ctrl_0_mean_g_mean = mean(meanG[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         ctrl_0_sd_g_mean = sd(meanG[Replicate_Group == "STA-0-1uM"], na.rm = TRUE),
-         #take signal minus the DMSO_mean
-         #(this is divided by positive control to get our normalized signal)
-         signal_minus_ctrl_0_mean_g_mean = meanG - ctrl_0_mean_g_mean,
-         # High control
-         ctrl_100_mean_g_mean = mean(meanG[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_minus_mean_g_mean = mean(signal_minus_ctrl_0_mean_g_mean[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         ctrl_100_sd_g_mean = sd(meanG[Replicate_Group == "STA-1uM"], na.rm = TRUE),
-         z_prime_factor_mean_g = 1 - (3*ctrl_100_sd_g_mean + 3*ctrl_0_sd_g_mean)/abs(ctrl_100_mean_g_mean - ctrl_0_mean_g_mean),
-         plate_cv_mean_g = mean(cv_mean_g_mean, na.rm = TRUE)) %>%
-        mutate(dmso_percent = NA,
-         starting_media = NA,
-         day = NA,
-         reader = NA) %>% ungroup()
+Here are the Z' factors for fB and G-Coordinate across the 3 experiments. Raw values are calculated using all individual measurements for each sample. Mean values first average indiividual measurements within each Sample_ID then calculates Z' factors using the averaged values. This minimizes intra-sample variability. 
 
 
-z_prime_mean_g_coord <- average_dataframe$z_prime_factor_mean_g
-plate_cv_mean_g_coord <- average_dataframe$plate_cv_mean_g
+```{r, echo=FALSE, message= FALSE, warning = FALSE}
+
+# Summary table for word
+
+summary_fb_raw <- data.frame(
+  Experiment = unique(zprime_fb_raw$Experiment),
+  z_prime_factor = zprime_fb_raw %>% select(Experiment, z_prime_factor_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_fb)
+)
+
+summary_fb_avg <- data.frame(
+  Experiment = unique(zprime_fb_avg$Experiment),
+  z_prime_factor = zprime_fb_avg %>% select(Experiment, z_prime_factor_mean_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_fb)
+)
+
+summary_g_raw <- data.frame(
+  Experiment = unique(zprime_g_raw$Experiment),
+  z_prime_factor = zprime_g_raw %>% select(Experiment, z_prime_factor_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_g)
+)
+
+summary_g_avg <- data.frame(
+  Experiment = unique(zprime_g_avg$Experiment),
+  z_prime_factor = zprime_g_avg %>% select(Experiment, z_prime_factor_mean_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_g)
+)
 
 
-summary_df4 <- data.frame(z_prime_factor = z_prime_mean_g_coord, percent_cv = plate_cv_mean_g_coord)
-summary_df4 <- summary_df4[1, , drop = FALSE]
+kable(summary_fb_raw, caption = "Z' Factor per Run (fB)")
+kable(summary_fb_avg, caption = "Z' Factor per Run (Average fB)")
+kable(summary_g_raw, caption = "Z' Factor per Run (G)")
+kable(summary_g_avg, caption = "Z' Factor per Run (Average G)")
 
-library(knitr)
 
-kable(summary_df4, caption = "Mean G-Coordinate Z'factor and %CV")
+
+
+
 
 
 ```
+
+
+
 
 # Scatterplot of S- & G- Coordinates of STA Treatments
 
@@ -225,7 +185,7 @@ library(viridis)
 
 # previously colored by Plate)ID (org1) but this is only 1 plate.
 
-scatterplot <- ggplot(dataframe, aes(x=G, y=S, color =Experiment)) + geom_point(size=4) + facet_wrap(~Replicate_Group + Concentration_uM) + labs(x = "G-coordinate", y = "S-coordinate", color = "Experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
+scatterplot <- ggplot(dataframe, aes(x=G, y=S, color =Experiment)) + geom_point(size=4) + facet_wrap(~Replicate_Group + Concentration) + labs(x = "G-coordinate", y = "S-coordinate", color = "Experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
 
 
 scatterplot
@@ -290,7 +250,7 @@ box_superplot
 
 
 # Fixed effects model (not considering experiment)
-invisible(fixed_effects_model <- lm(fB ~ Concentration, data = df_all))
+#invisible(fixed_effects_model <- lm(fB ~ Concentration, data = df_all))
 
 
 # Fixed effects plot
@@ -316,7 +276,7 @@ fixed_plot
 
 ```{r mem, echo=FALSE, warning=FALSE, message=FALSE,fig.width=12, fig.height=9, dpi=300}
 # Mixed effects model
-invisible(mixed_effects_model <- lmer(fB ~ Concentration  + (1 | Experiment), data=df_all))
+#invisible(mixed_effects_model <- lmer(fB ~ Concentration  + (1 | Experiment), data=df_all))
 
 
 mixed_effects_plot_w_date <- ggplot(data = df_all, aes(x = Concentration, y = fB, color = as.factor(Experiment))) +
