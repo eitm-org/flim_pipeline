@@ -24,7 +24,7 @@ df <- all_paths %>%
 library(dplyr)
 library(knitr)
 
-avg_df <- df %>% group_by(sample_id) %>% mutate(mean_g_coord = mean(g), mean_f_b = mean(f_b))  %>% ungroup()
+avg_df <- df %>% group_by(sample_id) %>% mutate(meanG = mean(G), mean_f_b = mean(f_b))  %>% ungroup()
 
 
 saveRDS(df, file = here("data", paste0("data_cleaning_output1_", ".RDS")))
