@@ -1,35 +1,30 @@
 ---
 title: "FLIM Analysis Template"
-output: word_document
-date: "2025-03-11"
 author: "Sevde Coban"
+date: '`r Sys.Date()`'
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
-
-# Set up
-
 library(dplyr)
 library(here)
 library(stringr)
 library(knitr)
 source("/Users/scoban/Documents/Github/danGoat/R/new_data_cleaner.R")
-
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(fig.width=12, fig.heaight=12, dpi=330)
-local_dest <- "/Users/scoban/Documents/Github/flim_pipeline/data"
-
 
 # Import data
-#dataframe is data imported using data_cleaning.R function
+# dataframe is data imported using new_data_cleaner.R function
 dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_outputnew_", ".RDS")))
 # average_dataframe is a df of the mean G and mean fB
 average_dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_outputnew_avg_", ".RDS")))
 
 ```
-
-
-
 
 
 ```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
@@ -209,9 +204,9 @@ library(lme4)
 library(ggbeeswarm)
 
 df_all <- dataframe %>% mutate(Concentration = case_when(
-  Replicate_Group == "untreated" ~ 0,
-  Replicate_Group == "STA-0-1uM" ~ 0.1,
-  Replicate_Group == "STA-1uM" ~ 1,
+  Replicate_Group == "DLD-1WT_untreated" ~ 0,
+  Replicate_Group == "DLD-1WT_STA-0-1uM" ~ 0.1,
+  Replicate_Group == "DLD-1WT_STA-1uM" ~ 1,
   TRUE ~ NA_real_
 ))
 
@@ -235,11 +230,9 @@ box_superplot <- ggplot(df_all, aes(x = as.factor(Concentration), y = fB)) +
 box_superplot
 
 ```
+The goal of this experiment is to compare fraction bound (fB) across varying concentrations of STA treatment. Each boxplot displays the distribution of fB for a specific concentration, and each point is color-coded by experimental run. You can see that the data tends to cluster by run rather than purely by treatment. The data points from run 3 consistently appear higher across all conditions. This suggests that a substantial percentage of the variation in fB is attributable to differences between experiment runs, rather than just treatment effects. This is not suprising because FLIM is a variable assay and there can be fluctuations between runs resulting in variations in the data. 
 
-
-
-
-
+To account for this, we use a mixed-effects model, with STA concentration as a fixed effects and experiment (run) as a random effect in order to isolate the effect of STA treatment on fB.
 
 
 
@@ -250,14 +243,15 @@ box_superplot
 
 
 # Fixed effects model (not considering experiment)
-#invisible(fixed_effects_model <- lm(fB ~ Concentration, data = df_all))
+invisible(fixed_effects_model <- lm(fB ~ Concentration, data = df_all))
 
 
 # Fixed effects plot
-fixed_plot <- ggplot(data = df_all, aes(x = Concentration, y = fB)) +
-    geom_point(alpha=0.9, color = "darkgray", size =3) +
+fixed_plot <- ggplot(data = df_all, aes(x = Concentration, y = fB, color=Experiment)) +
+    geom_point(alpha=0.9, size =3) +
     geom_smooth(method = "lm", se = FALSE, color = "black") +
-    theme_bw(base_size=20) +
+  scale_color_brewer(palette = "Dark2") +
+  theme_bw(base_size=20) +
     ggtitle("STA Fraction Bound") + 
     labs(subtitle = "Fixed Effects Visualizer") +
     ylab("Fraction Bound") +
@@ -268,7 +262,7 @@ fixed_plot
 
 ```
 
-
+This is a fixed linear model that only considers concentration and not experiment in the model. Just looking at concentration, we observe that fB slightly decreases as STA concentration increases. 
 
 
 
@@ -276,7 +270,7 @@ fixed_plot
 
 ```{r mem, echo=FALSE, warning=FALSE, message=FALSE,fig.width=12, fig.height=9, dpi=300}
 # Mixed effects model
-#invisible(mixed_effects_model <- lmer(fB ~ Concentration  + (1 | Experiment), data=df_all))
+invisible(mixed_effects_model <- lmer(fB ~ Concentration  + (1 | Experiment), data=df_all))
 
 
 mixed_effects_plot_w_date <- ggplot(data = df_all, aes(x = Concentration, y = fB, color = as.factor(Experiment))) +
@@ -295,5 +289,25 @@ mixed_effects_plot_w_date
 
 ```
 
-The mixed effect model examines the effects of STA Concentration on fraction bound, with experiment as a random variable to assess differences between experiment runs.
+The mixed effect model shows us that the overall results are being skewed by outliers from run 2. While run 1 and run 3 show a consistent trend in how fraction bound responds to STA concentration, increasing fB as concentration increases, run 2 deviates from that pattern and decreases fB as concentration increases. This skews the results we see in the fixed effects model. By including experiment as a random effect, the model helps correct for the variability across runs and displays the true relationship between STA and fB.
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+mod_tab <- sjPlot::tab_model(mixed_effects_model)
+mod_tab_df <-sjtable2df::mtab2df(mtab = mod_tab, n_models = 1, output ="data.frame")
+
+mod_tab_df
+```
+
+
+This mixed effects model assesses the effect of STA concentration on fraction bound, while accounting for experiment variation with Experiment as a random effect. The estimate column contains the average difference in Fraction Bound from the intercept produced each unit of concentration.
+
+The fixed effect estimate for concentration is 0.00, and a p-value of 0.981, suggesting that concentration does not have a statistically significant effect on fraction bound.
+
+The intercept estimate is 0.68, which represents the average fraction bound with concentration is 0.
+
+The ICC is 0.34, which means that 34% of the variation in fB can be attributed to differences between the runs.
+
+For the random effects, the marginal R squared only considers the variance of fixed effects. The conditional R squared takes in both the fixed effects and the random effects. The marginal R squared is 0.00, suggesting that none of the differences in fB can be explained by just concentration. The conditional R squared is 0.336, which means that when experiment is accounted for as a random effect, 33.6% of the variation is explained.
+
 
