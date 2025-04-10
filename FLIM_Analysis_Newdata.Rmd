@@ -171,7 +171,7 @@ kable(summary_g_avg, caption = "Z' Factor per Run (Average G)")
 # Scatterplot of S- & G- Coordinates of STA Treatments
 
 
-```{r plot1, echo=FALSE, warning=FALSE, message=FALSE,  fig.width=13, fig.height=10, dpi=330}
+```{r plot1, echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=9, dpi=330}
 
 library(ggplot2)
 library(viridis)
