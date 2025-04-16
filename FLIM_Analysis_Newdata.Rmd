@@ -3,9 +3,9 @@ title: "FLIM Analysis Template"
 author: "Sevde Coban"
 date: '`r Sys.Date()`'
 output:
-  word_document: default
   html_document:
     df_print: paged
+  word_document: default
   pdf_document: default
 ---
 
@@ -14,22 +14,23 @@ library(dplyr)
 library(here)
 library(stringr)
 library(knitr)
-source("/Users/scoban/Documents/Github/danGoat/R/new_data_cleaner.R")
+source("/Users/scoban/Documents/Github/flim_pipeline/R/newdatacleaner.R")
+db_dest <- here("data")
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(fig.width=12, fig.heaight=12, dpi=330)
 
-# Import data
-# dataframe is data imported using new_data_cleaner.R function
-dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_outputnew_", ".RDS")))
-# average_dataframe is a df of the mean G and mean fB
-average_dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_outputnew_avg_", ".RDS")))
+
+dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_output1", ".RDS")))
+average_dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_output_avg1", ".RDS")))
+
+
 
 ```
 
 
 ```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
 # Function to extract concentration from the 'Replicate_Group' column
-extract_concentration <- function(dataframe, replicate_group_column = "Replicate_Group") {
+extract_concentration <- function(dataframe, replicate_group_column = "replicate_group") {
   get_concentration <- function(value) {
     # Extract last part after underscore
     treatment <- sub(".*_", "", value)
@@ -67,11 +68,11 @@ The purpose of this analysis is to compare the differences in fraction bound (fB
 
 # Function to calculate z' factor
 
-calculate_zprime <- function(df, value_col, replicate_col = "Replicate_Group") {
+calculate_zprime <- function(df, value_col, replicate_col = "replicate_group") {
   df_list <- list()
 
-  for (exp in unique(df$Experiment)) {
-    sub_df <- df[df$Experiment == exp, ]
+  for (exp in unique(df$experiment)) {
+    sub_df <- df[df$experiment == exp, ]
     x <- sub_df[[value_col]]
     rep_group <- sub_df[[replicate_col]]
 
@@ -94,7 +95,7 @@ calculate_zprime <- function(df, value_col, replicate_col = "Replicate_Group") {
       z_prime <- NA_real_
     }
 
-    df_list[[exp]] <- data.frame(Experiment = exp, z_prime_factor = z_prime)
+    df_list[[exp]] <- data.frame(experiment = exp, z_prime_factor = z_prime)
   }
 
   return(do.call(rbind, df_list))
@@ -115,40 +116,40 @@ average_dataframe <- extract_concentration(average_dataframe)
 
 ```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
 # Finding z' values (mean and raw)
-zprime_fb_raw  <- calculate_zprime(dataframe, "fB")
-zprime_g_raw   <- calculate_zprime(dataframe, "G")
-zprime_fb_avg  <- calculate_zprime(average_dataframe, "meanfB")
+zprime_fb_raw  <- calculate_zprime(dataframe, "f_b")
+zprime_g_raw   <- calculate_zprime(dataframe, "g")
+zprime_fb_avg  <- calculate_zprime(average_dataframe, "mean_f_b")
 zprime_g_avg   <- calculate_zprime(average_dataframe, "meanG")
 
 
 ```
 
 
-Here are the Z' factors for fB and G-Coordinate across the 3 experiments. Raw values are calculated using all individual measurements for each sample. Mean values first average indiividual measurements within each Sample_ID then calculates Z' factors using the averaged values. This minimizes intra-sample variability. 
+Here are the Z' factors for fB and G-Coordinate across the 3 experiments. Raw values are calculated using all individual measurements for each sample. Mean values first average individual measurements within each Sample_ID then calculates Z' factors using the averaged values. This minimizes intra-sample variability. 
 
 
-```{r, echo=FALSE, message= FALSE, warning = FALSE}
+```{r find, echo=FALSE, message= FALSE, warning = FALSE}
 
 # Summary table for word
 
 summary_fb_raw <- data.frame(
-  Experiment = unique(zprime_fb_raw$Experiment),
-  z_prime_factor = zprime_fb_raw %>% select(Experiment, z_prime_factor_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_fb)
+  experiment = unique(zprime_fb_raw$experiment),
+  z_prime_factor = zprime_fb_raw %>% select(experiment, z_prime_factor_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_fb)
 )
 
 summary_fb_avg <- data.frame(
-  Experiment = unique(zprime_fb_avg$Experiment),
-  z_prime_factor = zprime_fb_avg %>% select(Experiment, z_prime_factor_mean_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_fb)
+  experiment = unique(zprime_fb_avg$experiment),
+  z_prime_factor = zprime_fb_avg %>% select(experiment, z_prime_factor_mean_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_fb)
 )
 
 summary_g_raw <- data.frame(
-  Experiment = unique(zprime_g_raw$Experiment),
-  z_prime_factor = zprime_g_raw %>% select(Experiment, z_prime_factor_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_g)
+  experiment = unique(zprime_g_raw$experiment),
+  z_prime_factor = zprime_g_raw %>% select(experiment, z_prime_factor_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_g)
 )
 
 summary_g_avg <- data.frame(
-  Experiment = unique(zprime_g_avg$Experiment),
-  z_prime_factor = zprime_g_avg %>% select(Experiment, z_prime_factor_mean_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_g)
+  experiment = unique(zprime_g_avg$experiment),
+  z_prime_factor = zprime_g_avg %>% select(experiment, z_prime_factor_mean_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_g)
 )
 
 
@@ -171,7 +172,7 @@ kable(summary_g_avg, caption = "Z' Factor per Run (Average G)")
 # Scatterplot of S- & G- Coordinates of STA Treatments
 
 
-```{r plot1, echo=FALSE, warning=FALSE, message=FALSE,  fig.width=13, fig.height=10, dpi=330}
+```{r plot1, echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=9, dpi=330}
 
 library(ggplot2)
 library(viridis)
@@ -180,7 +181,7 @@ library(viridis)
 
 # previously colored by Plate)ID (org1) but this is only 1 plate.
 
-scatterplot <- ggplot(dataframe, aes(x=G, y=S, color =Experiment)) + geom_point(size=4) + facet_wrap(~Replicate_Group + Concentration) + labs(x = "G-coordinate", y = "S-coordinate", color = "Experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
+scatterplot <- ggplot(dataframe, aes(x=g, y=s, color =experiment)) + geom_point(size=4) + facet_wrap(~replicate_group + Concentration) + labs(x = "G-coordinate", y = "S-coordinate", color = "experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
 
 
 scatterplot
@@ -204,33 +205,33 @@ library(lme4)
 library(ggbeeswarm)
 
 df_all <- dataframe %>% mutate(Concentration = case_when(
-  Replicate_Group == "DLD-1WT_untreated" ~ 0,
-  Replicate_Group == "DLD-1WT_STA-0-1uM" ~ 0.1,
-  Replicate_Group == "DLD-1WT_STA-1uM" ~ 1,
+  replicate_group == "DLD-1WT_untreated" ~ 0,
+  replicate_group == "DLD-1WT_STA-0-1uM" ~ 0.1,
+  replicate_group == "DLD-1WT_STA-1uM" ~ 1,
   TRUE ~ NA_real_
 ))
 
 
 averages <- df_all %>%
-  group_by(Experiment, Concentration) %>%
-  summarize(mean_fB = mean(fB, na.rm=TRUE), .groups='drop')
+  group_by(experiment, Concentration) %>%
+  summarize(mean_f_b = mean(f_b, na.rm=TRUE), .groups='drop')
 
 
 
-box_superplot <- ggplot(df_all, aes(x = as.factor(Concentration), y = fB)) + 
+box_superplot <- ggplot(df_all, aes(x = as.factor(Concentration), y = f_b)) + 
   geom_boxplot(outlier.shape = NA, alpha = 0.9) +
-  geom_quasirandom(aes(color = as.factor(Experiment)), size = 2, alpha = 0.9) +
-  geom_beeswarm(data = averages, aes(x = as.factor(Concentration), y = mean_fB,color = as.factor(Experiment)), size = 5)+ 
+  geom_quasirandom(aes(color = as.factor(experiment)), size = 2, alpha = 0.9) +
+  geom_beeswarm(data = averages, aes(x = as.factor(Concentration), y = mean_f_b,color = as.factor(experiment)), size = 5)+ 
   scale_color_brewer(palette = "Dark2") +
   theme_bw(base_size=20) +
   ggtitle("Fraction Bound Across Conditions") +
-  labs(x = "STA Concentration uM", y = "Fraction Bound", color = "Experiment")
+  labs(x = "STA Concentration uM", y = "Fraction Bound", color = "experiment")
   
   
 box_superplot
 
 ```
-The goal of this experiment is to compare fraction bound (fB) across varying concentrations of STA treatment. Each boxplot displays the distribution of fB for a specific concentration, and each point is color-coded by experimental run. You can see that the data tends to cluster by run rather than purely by treatment. The data points from run 3 consistently appear higher across all conditions. This suggests that a substantial percentage of the variation in fB is attributable to differences between experiment runs, rather than just treatment effects. This is not suprising because FLIM is a variable assay and there can be fluctuations between runs resulting in variations in the data. 
+The goal of this experiment is to compare fraction bound (fB) across varying concentrations of STA treatment. Each boxplot displays the distribution of fB for a specific concentration, and each point is color-coded by experimental run. You can see that the data tends to cluster by run rather than purely by treatment. The data points from run 3 appear higher across all the first 2 conditions. This suggests that a substantial percentage of the variation in fB is attributable to differences between experiment runs, rather than just treatment effects. This is not surprising because FLIM is a variable assay and there can be fluctuations between runs resulting in variations in the data. 
 
 To account for this, we use a mixed-effects model, with STA concentration as a fixed effects and experiment (run) as a random effect in order to isolate the effect of STA treatment on fB.
 
@@ -243,11 +244,11 @@ To account for this, we use a mixed-effects model, with STA concentration as a f
 
 
 # Fixed effects model (not considering experiment)
-invisible(fixed_effects_model <- lm(fB ~ Concentration, data = df_all))
+invisible(fixed_effects_model <- lm(f_b ~ Concentration, data = df_all))
 
 
 # Fixed effects plot
-fixed_plot <- ggplot(data = df_all, aes(x = Concentration, y = fB, color=Experiment)) +
+fixed_plot <- ggplot(data = df_all, aes(x = Concentration, y = f_b, color=experiment)) +
     geom_point(alpha=0.9, size =3) +
     geom_smooth(method = "lm", se = FALSE, color = "black") +
   scale_color_brewer(palette = "Dark2") +
@@ -262,7 +263,7 @@ fixed_plot
 
 ```
 
-This is a fixed linear model that only considers concentration and not experiment in the model. Just looking at concentration, we observe that fB slightly decreases as STA concentration increases. 
+This is a fixed linear model that only considers concentration and not experiment in the model. Just looking at concentration, we observe that fB slightly increases as STA concentration increases. 
 
 
 
@@ -270,17 +271,17 @@ This is a fixed linear model that only considers concentration and not experimen
 
 ```{r mem, echo=FALSE, warning=FALSE, message=FALSE,fig.width=12, fig.height=9, dpi=300}
 # Mixed effects model
-invisible(mixed_effects_model <- lmer(fB ~ Concentration  + (1 | Experiment), data=df_all))
+invisible(mixed_effects_model <- lmer(f_b ~ Concentration  + (1 | experiment), data=df_all))
 
 
-mixed_effects_plot_w_date <- ggplot(data = df_all, aes(x = Concentration, y = fB, color = as.factor(Experiment))) +
+mixed_effects_plot_w_date <- ggplot(data = df_all, aes(x = Concentration, y = f_b, color = as.factor(experiment))) +
   geom_point(alpha=0.9, size=3) +
-    geom_smooth(method = "lm", aes(group=Experiment), se = FALSE, size =1.2) +
+    geom_smooth(method = "lm", aes(group=experiment), se = FALSE, size =1.2) +
   theme_bw(base_size=20) +
   scale_color_brewer(palette = "Dark2") +
     ggtitle("STA Fraction Bound") + 
     labs(subtitle = "Mixed Effects Visualizer") +
-    labs(x = "STA Concentration (uM)", y = "Fraction Bound", color = "Experiment")
+    labs(x = "STA Concentration (uM)", y = "Fraction Bound", color = "experiment")
 
 
 mixed_effects_plot_w_date
@@ -289,7 +290,7 @@ mixed_effects_plot_w_date
 
 ```
 
-The mixed effect model shows us that the overall results are being skewed by outliers from run 2. While run 1 and run 3 show a consistent trend in how fraction bound responds to STA concentration, increasing fB as concentration increases, run 2 deviates from that pattern and decreases fB as concentration increases. This skews the results we see in the fixed effects model. By including experiment as a random effect, the model helps correct for the variability across runs and displays the true relationship between STA and fB.
+The mixed effect model shows us that the overall results are being skewed by outliers from run 2. While run 1 and run 3 show a consistent trend in how fraction bound responds to STA concentration, increasing fB as concentration increases, run 2 deviates from that pattern and increases fB significantly as concentration increases compared to the other 2 runs. This skews the results we see in the fixed effects model. By including experiment as a random effect, the model helps correct for the variability across runs and displays the true relationship between STA and fB.
 
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
@@ -300,14 +301,166 @@ mod_tab_df
 ```
 
 
-This mixed effects model assesses the effect of STA concentration on fraction bound, while accounting for experiment variation with Experiment as a random effect. The estimate column contains the average difference in Fraction Bound from the intercept produced each unit of concentration.
+This mixed effects model assesses the effect of STA concentration on fraction bound, while accounting for experiment variation with experiment as a random effect. The estimate column contains the average difference in Fraction Bound from the intercept produced each unit of concentration.
 
-The fixed effect estimate for concentration is 0.00, and a p-value of 0.981, suggesting that concentration does not have a statistically significant effect on fraction bound.
+The fixed effect estimate for concentration is 0.03, and a p-value of <0.001, suggesting that concentration does have a statistically significant effect on fraction bound.
 
 The intercept estimate is 0.68, which represents the average fraction bound with concentration is 0.
 
-The ICC is 0.34, which means that 34% of the variation in fB can be attributed to differences between the runs.
+The ICC is 0.35, which means that 35% of the variation in fB can be attributed to differences between the runs.
 
-For the random effects, the marginal R squared only considers the variance of fixed effects. The conditional R squared takes in both the fixed effects and the random effects. The marginal R squared is 0.00, suggesting that none of the differences in fB can be explained by just concentration. The conditional R squared is 0.336, which means that when experiment is accounted for as a random effect, 33.6% of the variation is explained.
+For the random effects, the marginal R squared only considers the variance of fixed effects. The conditional R squared takes in both the fixed effects and the random effects. The marginal R squared is 0.197, suggesting that 19.7% of the differences in fB can be explained by just concentration. The conditional R squared is 0.475, which means that when experiment is accounted for as a random effect, 47.5% of the variation is explained.
+
+This suggests that experimental variability plays a role in explaining differences in fB. To correct the impact of the experiment on fB, we will apply batch correction.
+
+## Batch Correction
+
+
+
+```{r batch, echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=9, dpi=300}
+
+library(dplyr)
+library(ggplot2)
+library(lme4)
+library(ggbeeswarm)
+library(batchtma)
+library(tidyverse)
+
+adjusted_dataframe <- dataframe %>%
+  adjust_batch(
+    markers = f_b,
+    batch = experiment,
+    method = simple
+  )
+
+adjusted_plot <- ggplot(adjusted_dataframe, aes(x = as.factor(Concentration),
+                      y = f_b_adj2)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.9) +
+  geom_quasirandom(aes(color = as.factor(experiment)), size = 2, alpha = 0.9) +
+  geom_beeswarm(data = averages, aes(x = as.factor(Concentration), y = mean_f_b,color = as.factor(experiment)), size = 5)+ 
+  scale_color_brewer(palette = "Dark2") +
+  theme_bw(base_size=20) +
+  ggtitle("Batch-Corrected Fraction Bound Across Conditions") +
+  labs(x = "STA Concentration uM", y = "Corrected Fraction Bound", color = "experiment")
+  
+
+  
+adjusted_plot
+
+```
+
+
+
+
+
+## Anova Test
+
+
+To compare the mean adjusted fB values across the three conditions, we run an anova test:
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+library(dplyr)
+library(car)         
+library(stats)        
+library(rstatix)     
+library(performance)
+library(janitor)
+
+
+get_anova_for_replicate_group <- function(df, batch_corr = FALSE) {
+  
+  test_results_output <- data.frame(matrix(ncol = 4, nrow = 0))
+  names(test_results_output) <- c("condition", "bartlett", "aov_pval", "aov_fstat")
+  g_h_results <- list()
+  tukeys_tables <- list()
+  
+  df_filtered <- df %>%
+    filter(replicate_group %in% c("DLD-1WT_untreated", "DLD-1WT_STA-0-1uM", "DLD-1WT_STA-1uM")) %>%
+    mutate(replicate_group = factor(replicate_group))
+  
+  levene_res <- leveneTest(f_b_adj2 ~ replicate_group, data = df_filtered)
+  bartlett_res <- bartlett.test(f_b_adj2 ~ replicate_group, data = df_filtered)
+  bartlett_p <- bartlett_res$p.value
+  print(levene_res)
+  print(bartlett_res)
+  
+  aov_model <- aov(f_b_adj2 ~ replicate_group, data = df_filtered)
+  welch_model <- oneway.test(f_b_adj2 ~ replicate_group, data = df_filtered, var.equal = FALSE)
+  
+  # post-hoc tests
+  if (bartlett_p < 0.05) {
+    # use welch and games-howell
+    anova_pval <- welch_model$p.value
+    anova_f <- welch_model$statistic
+    posthoc <- games_howell_test(df_filtered, f_b_adj2 ~ replicate_group)
+    g_h_results[["fB"]] <- posthoc
+    message("Used Welch’s ANOVA + Games-Howell post-hoc")
+  } else {
+    # use anova + Tukey
+    anova_summary <- summary(aov_model)[[1]]
+    anova_pval <- anova_summary$`Pr(>F)`[1]
+    anova_f <- anova_summary$`F value`[1]
+    posthoc <- as.data.frame(TukeyHSD(aov_model)$`replicate_group`) %>% clean_names()
+    tukeys_tables[["fB"]] <- posthoc
+    message("Used standard ANOVA + Tukey HSD post-hoc")
+  }
+  
+  test_results_output[1, ] <- c("fB", round(bartlett_p, 4), round(anova_pval, 4), round(anova_f, 3))
+  check_norm <- performance::check_normality(aov_model)
+  
+  return(list(
+    check_norm = check_norm,
+    test_results_output = test_results_output,
+    g_h_results = g_h_results,
+    tukeys_tables = tukeys_tables
+  ))
+}
+
+anova_results <- get_anova_for_replicate_group(adjusted_dataframe)
+View(anova_results$test_results_output)
+anova_results$g_h_results[["fB"]]  
+anova_results$tukeys_tables[["fB"]] 
+anova_results$check_norm            
+
+library(kableExtra)
+library(dplyr)
+
+gh_table <- anova_results$g_h_results[["fB"]]
+
+gh_table_formatted <- gh_table %>%
+  select(group1, group2, p.adj, conf.low, conf.high, estimate) %>%
+  mutate(p.adj = signif(p.adj, 3),
+         estimate = round(estimate, 3),
+         conf.low = round(conf.low, 3),
+         conf.high = round(conf.high, 3)) %>%
+  rename(
+    `Group 1` = group1,
+    `Group 2` = group2,
+    `p-value (adj)` = p.adj,
+    `Mean Difference` = estimate,
+    `95% CI Lower` = conf.low,
+    `95% CI Upper` = conf.high
+  )
+
+gh_table_formatted %>%
+  kbl(caption = "Games-Howell Post-hoc Comparison Between Treatment Conditions") %>%
+  kable_styling(full_width = FALSE, position = "left")
+
+
+
+```
+
+Data is not normally distributed so we cannot use Levene's or Bartlett's tests. We use Welch’s ANOVA with Games-Howell post-hoc test.
+
+The Games-Howell post-hoc test compared f_b_adj2 between all pairs of the three treatment conditions. 
+
+For STA-0-1uM vs STA-1uM, we have a p-value < 1e-14, with STA-0-1uM having higher binding by 0.041 units.
+
+For STA-0-1uM vs untreated, we have a p-value < 0.001, with STA-0-1uM having higher binding by 0.029 units.
+
+For STA-1uM vs untreated, we have a p-value < 0.001, with STA-1uM having lower binding than untreated condition by 0.012 units.
+
 
 
