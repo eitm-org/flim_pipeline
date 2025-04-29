@@ -359,7 +359,7 @@ adjusted_plot
 To compare the mean adjusted fB values across the three conditions, we run an anova test:
 
 
-```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+```{r anova echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 
 library(dplyr)
 library(car)         
@@ -449,6 +449,39 @@ gh_table_formatted %>%
   kable_styling(full_width = FALSE, position = "left")
 
 
+
+```
+
+
+
+```{r comparison echo=FALSE, warning=FALSE, message=FALSE}
+
+library(knitr)
+
+
+gh_table_formatted %>%
+  kable(caption = "Games-Howell Post-hoc Comparison Between Treatment Conditions") %>%
+  kableExtra::kable_styling(full_width = FALSE, position = "left")
+
+
+library(ggplot2)
+
+
+gh_table_formatted$comparison <- paste(gh_table_formatted$`Group 1`, "vs", gh_table_formatted$`Group 2`)
+
+plott <- ggplot(gh_table_formatted, aes(x = comparison, y = `Mean Difference`)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = `95% CI Lower`, ymax = `95% CI Upper`), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  labs(
+    title = "Games-Howell Post-Hoc Differences in Fraction Bound (fB)",
+    x = "Pairwise Comparison",
+    y = "Mean Difference (fB)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+
+plott
 
 ```
 
