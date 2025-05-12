@@ -2,33 +2,56 @@
 title: "FLIM Analysis Template"
 author: "Sevde Coban"
 date: '`r Sys.Date()`'
+params:
+  cleaned_data: "data_cleaning_output.RDS"
+  avg_data: "data_cleaning_output_avg.RDS"
+  dropbox_script: "R/dropbox_downloader.R"
+  data_cleaner_script: "R/newdatacleaner.R"
 output:
   html_document:
     df_print: paged
   word_document: default
   pdf_document: default
+
 ---
 
 ```{r setup, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+# Load libraries
 library(dplyr)
 library(here)
 library(stringr)
 library(knitr)
-source("/Users/scoban/Documents/Github/flim_pipeline/R/newdatacleaner.R")
-db_dest <- here("data")
-knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(fig.width=12, fig.heaight=12, dpi=330)
+library(ggplot2)
+library(viridis)
+library(lme4)
+library(ggbeeswarm)
+library(car)         
+library(stats)        
+library(rstatix)     
+library(performance)
+library(janitor)
+
+# Load scripts
+source(here::here(params$dropbox_script))
+source(here::here(params$data_cleaner_script))
+
+#Read in data
+db_dest <- here::here("data")
+
+datafile <- file.path(db_dest, params$cleaned_data)
+datafile_avg <- file.path(db_dest, params$avg_data)
 
 
-dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_output1", ".RDS")))
-average_dataframe <- readRDS(file.path(db_dest, paste0("data_cleaning_output_avg1", ".RDS")))
+dataframe <- readRDS(datafile)
+average_dataframe <- readRDS(datafile_avg)
 
 
 
 ```
 
 
-```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+```{r concentration, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+
 # Function to extract concentration from the 'Replicate_Group' column
 extract_concentration <- function(dataframe, replicate_group_column = "replicate_group") {
   get_concentration <- function(value) {
@@ -54,6 +77,14 @@ extract_concentration <- function(dataframe, replicate_group_column = "replicate
   dataframe$Concentration <- sapply(dataframe[[replicate_group_column]], get_concentration)
   return(dataframe)
 }
+
+
+dataframe <- extract_concentration(dataframe)
+average_dataframe <- extract_concentration(average_dataframe)
+
+
+
+
 ```
 
 # Purpose
@@ -64,13 +95,12 @@ The purpose of this analysis is to compare the differences in fraction bound (fB
 
 
 # Z' Factors for Fraction Bound and G-Coordinates
-```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
+```{r zfactors, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
 
 # Function to calculate z' factor
 
 calculate_zprime <- function(df, value_col, replicate_col = "replicate_group") {
   df_list <- list()
-
   for (exp in unique(df$experiment)) {
     sub_df <- df[df$experiment == exp, ]
     x <- sub_df[[value_col]]
@@ -104,69 +134,21 @@ calculate_zprime <- function(df, value_col, replicate_col = "replicate_group") {
 
 
 
-
 ```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
-# Extract concentrations
-dataframe <- extract_concentration(dataframe)
-average_dataframe <- extract_concentration(average_dataframe)
-
-```
-
-
-
-```{r, include=FALSE, echo=FALSE, message= FALSE, warning = FALSE}
-# Finding z' values (mean and raw)
+# Find z' values (mean and raw)
 zprime_fb_raw  <- calculate_zprime(dataframe, "f_b")
 zprime_g_raw   <- calculate_zprime(dataframe, "g")
 zprime_fb_avg  <- calculate_zprime(average_dataframe, "mean_f_b")
 zprime_g_avg   <- calculate_zprime(average_dataframe, "meanG")
 
-
+kable(zprime_fb_raw, caption = "Z' Factor per Run (fB)")
+kable(zprime_fb_avg, caption = "Z' Factor per Run (Average fB)")
+kable(zprime_g_raw, caption = "Z' Factor per Run (G)")
+kable(zprime_g_avg, caption = "Z' Factor per Run (Average G)")
 ```
 
 
 Here are the Z' factors for fB and G-Coordinate across the 3 experiments. Raw values are calculated using all individual measurements for each sample. Mean values first average individual measurements within each Sample_ID then calculates Z' factors using the averaged values. This minimizes intra-sample variability. 
-
-
-```{r find, echo=FALSE, message= FALSE, warning = FALSE}
-
-# Summary table for word
-
-summary_fb_raw <- data.frame(
-  experiment = unique(zprime_fb_raw$experiment),
-  z_prime_factor = zprime_fb_raw %>% select(experiment, z_prime_factor_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_fb)
-)
-
-summary_fb_avg <- data.frame(
-  experiment = unique(zprime_fb_avg$experiment),
-  z_prime_factor = zprime_fb_avg %>% select(experiment, z_prime_factor_mean_fb = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_fb)
-)
-
-summary_g_raw <- data.frame(
-  experiment = unique(zprime_g_raw$experiment),
-  z_prime_factor = zprime_g_raw %>% select(experiment, z_prime_factor_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_g)
-)
-
-summary_g_avg <- data.frame(
-  experiment = unique(zprime_g_avg$experiment),
-  z_prime_factor = zprime_g_avg %>% select(experiment, z_prime_factor_mean_g = z_prime_factor) %>% distinct() %>% pull(z_prime_factor_mean_g)
-)
-
-
-kable(summary_fb_raw, caption = "Z' Factor per Run (fB)")
-kable(summary_fb_avg, caption = "Z' Factor per Run (Average fB)")
-kable(summary_g_raw, caption = "Z' Factor per Run (G)")
-kable(summary_g_avg, caption = "Z' Factor per Run (Average G)")
-
-
-
-
-
-
-
-```
-
-
 
 
 # Scatterplot of S- & G- Coordinates of STA Treatments
@@ -174,12 +156,6 @@ kable(summary_g_avg, caption = "Z' Factor per Run (Average G)")
 
 ```{r plot1, echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=9, dpi=330}
 
-library(ggplot2)
-library(viridis)
-
-
-
-# previously colored by Plate)ID (org1) but this is only 1 plate.
 
 scatterplot <- ggplot(dataframe, aes(x=g, y=s, color =experiment)) + geom_point(size=4) + facet_wrap(~replicate_group + Concentration) + labs(x = "G-coordinate", y = "S-coordinate", color = "experiment") + scale_color_brewer(palette = "Dark2") + theme_bw(base_size=20) + ggtitle("S- & G- Coordinates") 
 
@@ -197,12 +173,7 @@ scatterplot
 
 ```{r boxplot, echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=9, dpi=300}
 
-#setting up STA-1uM_df
-
-library(dplyr)
-library(ggplot2)
-library(lme4)
-library(ggbeeswarm)
+# Boxplot of fB
 
 df_all <- dataframe %>% mutate(Concentration = case_when(
   replicate_group == "DLD-1WT_untreated" ~ 0,
@@ -215,7 +186,6 @@ df_all <- dataframe %>% mutate(Concentration = case_when(
 averages <- df_all %>%
   group_by(experiment, Concentration) %>%
   summarize(mean_f_b = mean(f_b, na.rm=TRUE), .groups='drop')
-
 
 
 box_superplot <- ggplot(df_all, aes(x = as.factor(Concentration), y = f_b)) + 
@@ -231,6 +201,8 @@ box_superplot <- ggplot(df_all, aes(x = as.factor(Concentration), y = f_b)) +
 box_superplot
 
 ```
+
+
 The goal of this experiment is to compare fraction bound (fB) across varying concentrations of STA treatment. Each boxplot displays the distribution of fB for a specific concentration, and each point is color-coded by experimental run. You can see that the data tends to cluster by run rather than purely by treatment. The data points from run 3 appear higher across all the first 2 conditions. This suggests that a substantial percentage of the variation in fB is attributable to differences between experiment runs, rather than just treatment effects. This is not surprising because FLIM is a variable assay and there can be fluctuations between runs resulting in variations in the data. 
 
 To account for this, we use a mixed-effects model, with STA concentration as a fixed effects and experiment (run) as a random effect in order to isolate the effect of STA treatment on fB.
@@ -239,8 +211,6 @@ To account for this, we use a mixed-effects model, with STA concentration as a f
 
 
 ```{r fixed, echo=FALSE, warning=FALSE, message=FALSE, fig.width=11, fig.height=9, dpi=300}
-
-
 
 
 # Fixed effects model (not considering experiment)
@@ -359,12 +329,7 @@ To compare the mean adjusted fB values across the three conditions, we run an an
 
 ```{r anova echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 
-library(dplyr)
-library(car)         
-library(stats)        
-library(rstatix)     
-library(performance)
-library(janitor)
+
 
 
 get_anova_for_replicate_group <- function(df, batch_corr = FALSE) {

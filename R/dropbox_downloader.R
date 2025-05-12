@@ -15,7 +15,7 @@ library(here)
 #like this: https://www.dropbox.com/sh/v8526atx7vfj7vb/AABFVp2nSFV1cCzNUppo34pHa?dl=1
 #this means that instead of taking you to the folder, this link will automatically download the folder
 #this example is the dropbox link to  'Dropbox (EITM)', 'EITM AR SPRC 2022 Docs', 'Data' folder
-dropbox_link <- "https://www.dropbox.com/home/Sevde%20Coban/Bioanalytics_FLIM-QC-analysis/input1"
+dropbox_link <- "https://www.dropbox.com/scl/fo/l1ccs9j283ztkarf5mdbu/AH7U_kik_o6f80hoqlISTqU?rlkey=2leaw3nfs75twbcjgbqd1ci53&st=jiqw3gtu&dl=1"
 
 #local dest must be a character string that refers to a directory within your project
 dropbox_downloader <- function(dropbox_link = dropbox_link, local_dest = local_dest) {
