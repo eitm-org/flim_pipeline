@@ -25,11 +25,13 @@ library(ggplot2)
 library(viridis)
 library(lme4)
 library(ggbeeswarm)
-library(car)         
+library(car)
+library(kableExtra)
 library(stats)        
 library(rstatix)     
 library(performance)
 library(janitor)
+library(batchtma)
 
 # Load scripts
 source(here::here(params$dropbox_script))
@@ -203,7 +205,7 @@ box_superplot
 ```
 
 
-The goal of this experiment is to compare fraction bound (fB) across varying concentrations of STA treatment. Each boxplot displays the distribution of fB for a specific concentration, and each point is color-coded by experimental run. You can see that the data tends to cluster by run rather than purely by treatment. The data points from run 3 appear higher across all the first 2 conditions. This suggests that a substantial percentage of the variation in fB is attributable to differences between experiment runs, rather than just treatment effects. This is not surprising because FLIM is a variable assay and there can be fluctuations between runs resulting in variations in the data. 
+The goal of this experiment is to compare fraction bound (fB) across varying concentrations of STA treatment. Each boxplot displays the distribution of fB for a specific concentration, and each point is color-coded by experimental run. You can see that the data tends to cluster by run rather than purely by treatment. This suggests that a substantial percentage of the variation in fB is attributable to differences between experiment runs, rather than just treatment effects. This is not surprising because FLIM is a variable assay and there can be fluctuations between runs resulting in variations in the data. 
 
 To account for this, we use a mixed-effects model, with STA concentration as a fixed effects and experiment (run) as a random effect in order to isolate the effect of STA treatment on fB.
 
@@ -233,7 +235,7 @@ fixed_plot
 
 ```
 
-This is a fixed linear model that only considers concentration and not experiment in the model. Just looking at concentration, we observe that fB slightly increases as STA concentration increases. 
+This is a fixed linear model that only considers concentration and not experiment in the model.
 
 
 
@@ -260,7 +262,7 @@ mixed_effects_plot_w_date
 
 ```
 
-The mixed effect model shows us that the overall results are being skewed by outliers from run 2. While run 1 and run 3 show a consistent trend in how fraction bound responds to STA concentration, increasing fB as concentration increases, run 2 deviates from that pattern and increases fB significantly as concentration increases compared to the other 2 runs. This skews the results we see in the fixed effects model. By including experiment as a random effect, the model helps correct for the variability across runs and displays the true relationship between STA and fB.
+The mixed effect model shows us that the overall results are being skewed by outliers from run __. This skews the results we see in the fixed effects model. By including experiment as a random effect, the model helps correct for the variability across runs and displays the true relationship between STA and fB.
 
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
@@ -270,16 +272,15 @@ mod_tab_df <-sjtable2df::mtab2df(mtab = mod_tab, n_models = 1, output ="data.fra
 mod_tab_df
 ```
 
-
 This mixed effects model assesses the effect of STA concentration on fraction bound, while accounting for experiment variation with experiment as a random effect. The estimate column contains the average difference in Fraction Bound from the intercept produced each unit of concentration.
 
-The fixed effect estimate for concentration is 0.03, and a p-value of <0.001, suggesting that concentration does have a statistically significant effect on fraction bound.
+The fixed effect estimate for concentration is ____, and a p-value of <0.001, suggesting that concentration does have a statistically significant effect on fraction bound.
 
-The intercept estimate is 0.68, which represents the average fraction bound with concentration is 0.
+The intercept estimate is ___, which represents the average fraction bound with concentration is 0.
 
-The ICC is 0.35, which means that 35% of the variation in fB can be attributed to differences between the runs.
+The ICC is ___, which means that ICC% of the variation in fB can be attributed to differences between the runs.
 
-For the random effects, the marginal R squared only considers the variance of fixed effects. The conditional R squared takes in both the fixed effects and the random effects. The marginal R squared is 0.197, suggesting that 19.7% of the differences in fB can be explained by just concentration. The conditional R squared is 0.475, which means that when experiment is accounted for as a random effect, 47.5% of the variation is explained.
+For the random effects, the marginal R squared only considers the variance of fixed effects. The conditional R squared takes in both the fixed effects and the random effects. The marginal R squared is ___, suggesting that marginal R squared % of the differences in fB can be explained by just concentration. The conditional R squared is __, which means that when experiment is accounted for as a random effect, conditional R squared % of the variation is explained.
 
 This suggests that experimental variability plays a role in explaining differences in fB. To correct the impact of the experiment on fB, we will apply batch correction.
 
@@ -327,7 +328,7 @@ adjusted_plot
 To compare the mean adjusted fB values across the three conditions, we run an anova test:
 
 
-```{r anova echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+```{r anova, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 
 
 
@@ -382,13 +383,13 @@ get_anova_for_replicate_group <- function(df, batch_corr = FALSE) {
 }
 
 anova_results <- get_anova_for_replicate_group(adjusted_dataframe)
-View(anova_results$test_results_output)
+
 anova_results$g_h_results[["fB"]]  
 anova_results$tukeys_tables[["fB"]] 
 anova_results$check_norm            
 
-library(kableExtra)
-library(dplyr)
+
+
 
 gh_table <- anova_results$g_h_results[["fB"]]
 
@@ -417,9 +418,9 @@ gh_table_formatted %>%
 
 
 
-```{r comparison echo=FALSE, warning=FALSE, message=FALSE}
+```{r comparison, echo=FALSE, warning=FALSE, message=FALSE}
 
-library(knitr)
+
 
 
 gh_table_formatted %>%
@@ -427,7 +428,7 @@ gh_table_formatted %>%
   kableExtra::kable_styling(full_width = FALSE, position = "left")
 
 
-library(ggplot2)
+
 
 
 gh_table_formatted$comparison <- paste(gh_table_formatted$`Group 1`, "vs", gh_table_formatted$`Group 2`)
@@ -452,14 +453,14 @@ Data is not normally distributed so we cannot use Levene's or Bartlett's tests. 
 
 The Games-Howell post-hoc test compared f_b_adj2 between all pairs of the three treatment conditions. 
 
-For STA-0-1uM vs STA-1uM, we have a p-value < 1e-14, with STA-0-1uM having higher binding by 0.041 units.
+For STA-0-1uM vs STA-1uM, we have a p-value < , with STA-0-1uM having higher/lower binding by ___ units.
 
-For STA-0-1uM vs untreated, we have a p-value < 0.001, with STA-0-1uM having higher binding by 0.029 units.
+For STA-0-1uM vs untreated, we have a p-value < , with STA-0-1uM having higher/lower binding by ___ units.
 
-For STA-1uM vs untreated, we have a p-value < 0.001, with STA-1uM having lower binding than untreated condition by 0.012 units.
+For STA-1uM vs untreated, we have a p-value < , with STA-1uM having higher/lower binding by ___ units.
 
 
-```{r}
+```{r ghtable, echo=FALSE, warning=FALSE, message=FALSE}
 gh_table_formatted$comparison <- paste(gh_table_formatted$`Group 1`, "vs", gh_table_formatted$`Group 2`)
 
 plott <- ggplot(gh_table_formatted, aes(x = comparison, y = `Mean Difference`)) +

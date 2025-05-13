@@ -17,6 +17,8 @@ dropbox_downloader(dropbox_link, db_dest)
 #list all files you copied over from dropbox
 all_paths <- list.files(file.path(db_dest, "unzipped"), recursive = TRUE, full.names = TRUE)
 all_paths
+
+# Change this
 target_filename <- "Ken-MATLAB_FLIM-pipeline-test_v2.xlsx" 
 matching_path <- all_paths[grep(target_filename, all_paths, fixed = TRUE)]
 matching_path
